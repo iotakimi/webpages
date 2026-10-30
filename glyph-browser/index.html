@@ -81,6 +81,7 @@ button{font:inherit; color:inherit}
 .cell svg{width:80%; height:80%; transition:transform .15s}
 @media (hover:hover){ .cell:hover svg{transform:translateY(-2px)} }
 .cell[aria-current="true"]{border-color:var(--line-strong)}
+.ghost{visibility:hidden; pointer-events:none}
 @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
 </style>
 <script>if(window.self!==window.top)document.documentElement.classList.add('embedded');</script>
@@ -193,10 +194,13 @@ function renderVariants(){const k=cat(),near=Math.round(st.t),exact=Math.abs(st.
   let h=(narrow?'':`<span class="colhead"></span>`)+HUES.map((x,i)=>`<span class="colhead${exact&&i===near?' on':''}">${narrow?x.name.slice(0,3):x.name}</span>`).join('');
   h+=k.types.map((ty,r)=>`<span class="rowname${r===st.type?' on':''}">${ty}</span>`+HUES.map((x,i)=>
     `<button class="cell" data-v="${r}|${i}" aria-current="${r===st.type&&exact&&i===near}" aria-label="${k.name} ${ty}, ${x.name}">${svgFor(k.name+'|'+ty)}</button>`).join('')).join('');
+  // reserve room for the longest category so the page height never changes
+  const maxRows=Math.max(...CATS.map(c=>c.types.length));
+  for(let r=k.types.length;r<maxRows;r++) h+=`<span class="rowname ghost" aria-hidden="true">&nbsp;</span>`+HUES.map(()=>`<span class="cell ghost" aria-hidden="true"></span>`).join('');
   const g=$('vgrid'); g.innerHTML=h;
-  g.querySelectorAll('.cell').forEach(c=>paint(c,+c.dataset.v.split('|')[1]));}
+  g.querySelectorAll('.cell[data-v]').forEach(c=>paint(c,+c.dataset.v.split('|')[1]));}
 function updateVariantMarks(){const near=Math.round(st.t),exact=Math.abs(st.t-near)<.06;
-  $('vgrid').querySelectorAll('.cell').forEach(c=>{const[r,i]=c.dataset.v.split('|').map(Number);c.setAttribute('aria-current',r===st.type&&exact&&i===near)});
+  $('vgrid').querySelectorAll('.cell[data-v]').forEach(c=>{const[r,i]=c.dataset.v.split('|').map(Number);c.setAttribute('aria-current',r===st.type&&exact&&i===near)});
   $('vgrid').querySelectorAll('.colhead').forEach((c,j,all)=>{const i=j-(all.length-6);c.classList.toggle('on',exact&&i===near)});}
 
 $('hue').style.setProperty('--track',`linear-gradient(90deg, ${HUES.map((h,i)=>css(hueColor(i,PW*.5))).join(',')})`);
@@ -221,6 +225,19 @@ $('sweep').addEventListener('click',()=>{
   raf=requestAnimationFrame(loop);
 });
 renderDetail();renderVariants();
+
+/* Hold the page at the height of its tallest category for the current width, so the embed never jumps. */
+function lockHeight(){
+  const body=document.body, save={cat:st.cat,type:st.type};
+  body.style.minHeight=''; let m=0;
+  CATS.forEach((c,i)=>{st.cat=i;st.type=0;renderDetail();renderVariants();m=Math.max(m,body.getBoundingClientRect().height)});
+  st.cat=save.cat;st.type=save.type;renderDetail();renderVariants();
+  body.style.minHeight=Math.ceil(m)+'px';
+}
+lockHeight();
+let lockW=window.innerWidth,lockT;
+addEventListener('resize',()=>{if(window.innerWidth===lockW)return;lockW=window.innerWidth;clearTimeout(lockT);lockT=setTimeout(lockHeight,150)});
+if(document.fonts) document.fonts.ready.then(lockHeight);
 
 /* Embed handshake: the Cargo page sends {type:'glyph-theme', theme:'dark'|'light'}; this page reports its height back. */
 (function(){
